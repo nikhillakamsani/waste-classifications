@@ -1,0 +1,4 @@
+1. open this folder in vs code and open the terminal and python version : 3.11.4
+2. .venv\Scripts\activate
+3. py .\manage.py runserver
+4. runs on localhost:8000
