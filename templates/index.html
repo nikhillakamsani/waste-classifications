@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waste Classification</title>
+    <style>
+        /* Global Styling */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .container {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            color: #333;
+        }
+
+        button {
+            padding: 12px;
+            font-size: 1rem;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        video, img {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            margin-top: 10px;
+            display: none; /* Initially hidden */
+        }
+
+        .result {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+            button {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Waste Classification</h1>
+
+        <!-- Upload Image Button -->
+        <button onclick="document.getElementById('fileInput').click()">Upload Image</button>
+        <input type="file" id="fileInput" accept="image/*" style="display: none;">
+
+        <!-- Camera Controls -->
+        <button id="startCam" onclick="startCamera()">Start Camera</button>
+        <button id="stopCam" onclick="stopCamera()" disabled>Stop Camera</button>
+        
+        <!-- Video Stream -->
+        <video id="video" autoplay></video>
+        <!-- Uploaded Image -->
+        <img id="uploadedImage">
+
+        <!-- Prediction Result -->
+        <p class="result" id="result">Waiting for image...</p>
+    </div>
+
+    <script>
+        let videoStream = null;
+        const video = document.getElementById('video');
+        const uploadedImage = document.getElementById('uploadedImage');
+        const resultDiv = document.getElementById('result');
+        const fileInput = document.getElementById('fileInput');
+        const startCamBtn = document.getElementById('startCam');
+        const stopCamBtn = document.getElementById('stopCam');
+
+        // Handle Image Upload
+        fileInput.addEventListener('change', async function (event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async function (e) {
+                    uploadedImage.src = e.target.result;
+                    uploadedImage.style.display = "block";
+                    video.style.display = "none";
+                    stopCamera(); // Ensure camera is stopped
+                    sendToServer(e.target.result, "file");
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Start Camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.style.display = "block";
+                uploadedImage.style.display = "none";
+                videoStream = stream;
+                startCamBtn.disabled = true;
+                stopCamBtn.disabled = false;
+                captureFrame();
+            } catch (error) {
+                console.error("Error accessing camera: ", error);
+                resultDiv.innerText = "Camera access denied.";
+            }
+        }
+
+        // Stop Camera
+        function stopCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                video.style.display = "none";
+                startCamBtn.disabled = false;
+                stopCamBtn.disabled = true;
+            }
+        }
+
+        // Capture frame from video every 2 seconds
+        function captureFrame() {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+
+            const intervalId = setInterval(async () => {
+                if (!videoStream) {
+                    clearInterval(intervalId); // Stop capturing if the camera is turned off
+                    return;
+                }
+
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg');
+
+                sendToServer(imageData, "camera");
+            }, 2000);
+        }
+
+        // Send Image to Server
+        async function sendToServer(imageData, source) {
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData, source: source })
+                });
+
+                const data = await response.json();
+                resultDiv.innerHTML = `Predicted: <strong>${data.prediction}</strong> <br> Confidence: <strong>${data.confidence}</strong>`;
+            } catch (error) {
+                console.error("Prediction error:", error);
+                resultDiv.innerText = "Error detecting object.";
+            }
+        }
+    </script>
+</body>
+</html>
